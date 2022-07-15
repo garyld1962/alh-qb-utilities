@@ -6,121 +6,127 @@ using CsvHelper.Configuration;
 using System.Globalization;
 
 
+var workingDirectory = Directory.GetCurrentDirectory().Replace(@"bin\Debug\net6.0", "");
+const string payrollAllocation = "PayrollAllocTable.csv";
+const string payrollEntries = "payrollentries.csv";
 
 var config = new CsvConfiguration(CultureInfo.InvariantCulture)
 {
     Delimiter = ","
 };
 
-var payrollAllocationDictionary = new Dictionary<string, PayrollAllocation>();
-
-using (var reader = new StreamReader(@"C:\Users\GaryDavidson\source\repos\Alh.AllocatePayroll\Alh.AllocatePayroll\PayrollAllocTable.csv"))
-
- 
-using (var csv = new CsvReader(reader, config))
-{
-    var records = csv.GetRecords<PayrollAllocation>();
-    foreach (var record in records)
-    {
-        payrollAllocationDictionary.Add(MakeKey(record), record);
-    }
-}
-
-string MakeKey(PayrollAllocation record)
-{
-    return $"{record.Name}-{record.Month.ToString()}";
-}
-
+Dictionary<string, PayrollAllocation> payrollAllocationDictionary = GetPayrollAllocation(workingDirectory, payrollAllocation, config);
 
 var entries = new List<PayrollEntry>();
 
-using (var reader = new StreamReader(@"C:\Users\GaryDavidson\source\repos\Alh.AllocatePayroll\Alh.AllocatePayroll\payrollentries.csv"))
+using (var reader = new StreamReader($"{workingDirectory}\\{payrollEntries}"))
 using (var csv = new CsvReader(reader, config))
 {
     var records = csv.GetRecords<PayrollDetails>();
     foreach (var record in records)
     {
-       var key = $"{record.Name}-{record.PayDate.Month}";
-       var allocation = payrollAllocationDictionary[key];
+     
+        var key = $"{record.Name}-{record.PayDate.Month}";
 
-       double allocated = 0;
+        var allocation = payrollAllocationDictionary[key];
 
-       if (allocation.CoralSpringsAllocation != 0)
-       {
-            var payrollEntry = new PayrollEntry();
-            payrollEntry.InvoiceNumber = InvoiceNumber(record);
-            payrollEntry.Class = "Coral Springs";
-            payrollEntry.Description = $"{record.Name} ({allocation.CoralSpringsAllocation * 100}% of {record.Amount})";
-            payrollEntry.Amount = Math.Round(double.Parse(record.Amount) * allocation.CoralSpringsAllocation,2);
+        decimal amountTobeAllocated = decimal.Parse(record.Amount);
 
-            entries.Add(payrollEntry);
+        // ????? 
+        decimal bocaRatonAllocatedAmount = Math.Round(amountTobeAllocated * allocation.BocaRatonAllocation, 2);
+        decimal coralSpringsAllocatedAmount = Math.Round(amountTobeAllocated * allocation.CoralSpringsAllocation, 2);
+        decimal boyntonBeachAllocatedAmount = Math.Round(amountTobeAllocated * allocation.BoyntonBeachAllocation, 2);
 
-            if (allocation.CoralSpringsAllocation == 1)
-                continue;
+        var roundedAmount = coralSpringsAllocatedAmount + boyntonBeachAllocatedAmount + bocaRatonAllocatedAmount;
 
-            allocated = payrollEntry.Amount;
-       }
-
-        if (allocation.BoyntonBeachAllocation != 0)
+        if (roundedAmount - amountTobeAllocated > 0)
         {
-            var payrollEntry = new PayrollEntry();
-            payrollEntry.InvoiceNumber = InvoiceNumber(record);
-            payrollEntry.Class = "Boynton Beach";
-            payrollEntry.Description = $"{record.Name} ({allocation.BoyntonBeachAllocation * 100}% of {record.Amount})";
-           
+            bocaRatonAllocatedAmount -= Math.Round((roundedAmount - amountTobeAllocated), 2);
+        }
+        else if (roundedAmount - amountTobeAllocated < 0)
+        {
+            bocaRatonAllocatedAmount += Math.Round((amountTobeAllocated - roundedAmount), 2);
+        }
 
-            if(allocation.BocaRatonAllocation == 0)
+        roundedAmount = Math.Round(coralSpringsAllocatedAmount + boyntonBeachAllocatedAmount + bocaRatonAllocatedAmount,2);
+
+        if (roundedAmount != amountTobeAllocated)
+        {
+            throw new Exception("Amounts do not balance");
+        }
+        if (coralSpringsAllocatedAmount != 0)
+        {
+            var payrollEntry = new PayrollEntry
             {
-                payrollEntry.Amount = double.Parse(record.Amount) - allocated;
-            }
-            else
+                InvoiceNumber = record.InvoiceNumber,
+                Class = "Coral Springs",
+                Description = $"{record.Name} ({allocation.CoralSpringsAllocation * 100}% of {record.Amount})",
+                Amount = coralSpringsAllocatedAmount
+            };
+            entries.Add(payrollEntry);
+        }
+
+        if (boyntonBeachAllocatedAmount != 0)
+        {
+            var payrollEntry = new PayrollEntry
             {
-                payrollEntry.Amount = Math.Round(double.Parse(record.Amount) * allocation.BoyntonBeachAllocation);
-                
-            }
-            allocated += payrollEntry.Amount;
+                InvoiceNumber = record.InvoiceNumber,
+                Class = "Boynton Beach",
+                Description = $"{record.Name} ({allocation.BoyntonBeachAllocation * 100}% of {record.Amount})",
+                Amount = boyntonBeachAllocatedAmount
+            };
+            entries.Add(payrollEntry);
+        }
+
+
+        if (bocaRatonAllocatedAmount != 0)
+        {
+            var payrollEntry = new PayrollEntry
+            {
+                InvoiceNumber = record.InvoiceNumber,
+                Class = "Boca Raton",
+                Description = $"{record.Name} ({allocation.BocaRatonAllocation * 100}% of {record.Amount})",
+                Amount = bocaRatonAllocatedAmount
+            };
             entries.Add(payrollEntry);
 
-            if (allocation.BoyntonBeachAllocation == 1)
-                continue;
-        }
-        
-
-        if (allocation.BocaRatonAllocation != 0)
-        {
-            var payrollEntry = new PayrollEntry();
-            payrollEntry.InvoiceNumber = InvoiceNumber(record);
-            payrollEntry.Class = "Boca Raton";
-            payrollEntry.Description = $"{record.Name} ({allocation.BocaRatonAllocation * 100}% of {record.Amount})";
-            payrollEntry.Amount = double.Parse(record.Amount) - allocated; 
-            allocated += payrollEntry.Amount;
-            entries.Add(payrollEntry);
 
 
-            if (allocation.BocaRatonAllocation == 1)
-                continue;
         }
 
-        if(double.Parse(record.Amount) - allocated != 0)
-        {
-            throw new Exception("Allocated amount does not equal payroll amount");
-        }
     }
 
 }
 
-using (var writer = new StreamWriter($"{Environment.CurrentDirectory}\\output.csv"))
+using (var writer = new StreamWriter($"{workingDirectory}\\output.csv"))
 using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
 {
     csv.WriteRecords(entries);
 }
-
-
-string InvoiceNumber(PayrollDetails detail)
-{
-
-    return $"{detail.PayDate.Year}-{detail.PayDate.Month }-{detail.PayDate.Day }";
-
-}
-
 Console.ReadLine();
+
+
+
+
+static Dictionary<string, PayrollAllocation> GetPayrollAllocation(string workingDirectory, string payrollAllocation, CsvConfiguration config)
+{
+    var payrollAllocationDictionary = new Dictionary<string, PayrollAllocation>();
+
+    using (var reader = new StreamReader($"{workingDirectory}\\{payrollAllocation}"))
+
+    using (var csv = new CsvReader(reader, config))
+    {
+        var records = csv.GetRecords<PayrollAllocation>();
+        foreach (var record in records)
+        {
+            payrollAllocationDictionary.Add(MakeKey(record), record);
+        }
+    }
+
+    string MakeKey(PayrollAllocation record)
+    {
+        return $"{record.Name}-{record.Month.ToString()}";
+    }
+
+    return payrollAllocationDictionary;
+}

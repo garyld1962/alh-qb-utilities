@@ -16,14 +16,15 @@ namespace Alh.AllocatePayroll
 
         public string Name { get; set; }
         public int Month { get; set; }
-        public double BocaRatonAllocation { get; set; }
-        public double BoyntonBeachAllocation { get; set; }
-        public double CoralSpringsAllocation { get; set; }
+        public decimal BocaRatonAllocation { get; set; }
+        public decimal BoyntonBeachAllocation { get; set; }
+        public decimal CoralSpringsAllocation { get; set; }
 
     }
 
     public class PayrollDetails
     {
+        public string InvoiceNumber { get; set; }
         public string Name { get; set; }
         public DateOnly PayDate { get; set; }
         public string Amount { get; set; }
@@ -35,6 +36,6 @@ namespace Alh.AllocatePayroll
         public string InvoiceNumber { get; set; }
         public string Class { get; set; }
         public string Description { get; set; }
-        public double Amount { get; set; }
+        public decimal Amount { get; set; }
     }
 }
